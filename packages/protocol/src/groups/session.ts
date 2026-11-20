@@ -374,6 +374,46 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         ),
     )
     .add(
+      HttpApiEndpoint.put(
+        "experimental.session.installReplyLease",
+        "/api/experimental/session/:sessionID/fabric-reply",
+        {
+          params: { sessionID: Session.ID },
+          payload: Schema.Struct({ source: Schema.String, eventId: Schema.String, replyKey: Schema.String }),
+          success: HttpApiSchema.NoContent,
+          error: InvalidRequestError,
+        },
+      )
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.session.installReplyLease",
+            summary: "Install a Fabric reply lease",
+            description:
+              "Open the host-pinned reply helper for this session and event. Experimental: may change without compatibility guarantees.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.delete(
+        "experimental.session.revokeReplyLease",
+        "/api/experimental/session/:sessionID/fabric-reply",
+        {
+          params: { sessionID: Session.ID },
+          success: HttpApiSchema.NoContent,
+        },
+      )
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.session.revokeReplyLease",
+            summary: "Revoke a Fabric reply lease",
+            description:
+              "Withdraw this session's current reply tool. Experimental: may change without compatibility guarantees.",
+          }),
+        ),
+    )
+    .add(
       HttpApiEndpoint.post("session.prompt", "/api/session/:sessionID/prompt", {
         params: { sessionID: Session.ID },
         payload: Schema.Struct({

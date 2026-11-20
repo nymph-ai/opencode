@@ -47,7 +47,11 @@ type Data = {
 export interface Interface extends State.Transformable<Editor> {
   readonly list: () => Effect.Effect<ReadonlyArray<Tool.Info & { readonly id: string }>>
   /** With `full_codemode`, Code Mode gets the experimental `path` global, resolving against `location`'s directory. */
-  readonly snapshot: (permissions?: Permission.Ruleset, location?: Location.Interface) => Effect.Effect<Snapshot>
+  readonly snapshot: (
+    permissions?: Permission.Ruleset,
+    location?: Location.Interface,
+    sessionTool?: Tool.Info,
+  ) => Effect.Effect<Snapshot>
   /**
    * Runs a Code Mode program with no model step over only the Code Mode tools named in `tools` (still subject to
    * whole-tool permission filtering and each tool's own executor policy), with no `fetch`.
@@ -268,7 +272,7 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
-      snapshot: Effect.fn("Tool.snapshot")((permissions, location) =>
+      snapshot: Effect.fn("Tool.snapshot")((permissions, location, sessionTool) =>
         Effect.map(flags.enabled("full_codemode"), (enabled) => {
           const path = enabled && location !== undefined
           const data = state.get()
@@ -282,7 +286,12 @@ const layer = Layer.effect(
           // Without Code Mode its tools would be unreachable, so expose them as direct tools instead.
           const direct = codeModeEnabled
             ? new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
-            : active
+            : new Map(active)
+          if (sessionTool) {
+            const name = effectiveName(sessionTool)
+            if (!data.tools.has(name) && !whollyDisabled(sessionTool.options?.permission ?? name, rules))
+              direct.set(name, sessionTool)
+          }
           const codeModeTools = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
           const names = Array.from(codeModeTools.keys()).join("\0")
           // Discovery is immutable for a registry revision and visible tool set. Keep executors
@@ -317,7 +326,7 @@ const layer = Layer.effect(
             definitions: [
               ...Array.from(direct)
                 .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-                .map(([name]) => data.definitions.get(name)!),
+                .map(([name, tool]) => data.definitions.get(name) ?? definition(tool)),
               ...(codeModeDefinition ? [codeModeDefinition] : []),
             ],
             execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {

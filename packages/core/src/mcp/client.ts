@@ -243,6 +243,8 @@ export interface Connection {
       readonly name: string
       readonly args?: Record<string, unknown>
       readonly sessionID?: Session.ID
+      /** Checked at the native SDK dispatch boundary, including any SDK retry. */
+      readonly canDispatch?: () => boolean
     } & PerRequest,
   ) => Effect.Effect<CallToolResult, Error>
   /** MCP Events, when the connection declared them and the server offers them. Experimental; see `Events`. */
@@ -710,8 +712,9 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
         ),
       callTool: (input) => {
         const call = Effect.tryPromise({
-          try: (signal) =>
-            client.callTool(
+          try: (signal) => {
+            if (input.canDispatch && !input.canDispatch()) throw new Error("MCP tool dispatch is no longer authorized")
+            return client.callTool(
               {
                 name: input.name,
                 arguments: input.args ?? {},
@@ -733,7 +736,8 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                   outputSchema: undefined,
                 } as CallToolRequestOptions["toolDefinition"],
               },
-            ),
+            )
+          },
           catch: (error) => error,
         })
         // A modern server rejects headers mirrored from a stale definition before running the tool,

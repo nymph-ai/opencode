@@ -101,6 +101,10 @@ import type {
   ExperimentalSessionActiveExecutionOutput,
   ExperimentalSessionActiveSteerInput,
   ExperimentalSessionActiveSteerOutput,
+  ExperimentalSessionInstallReplyLeaseInput,
+  ExperimentalSessionInstallReplyLeaseOutput,
+  ExperimentalSessionRevokeReplyLeaseInput,
+  ExperimentalSessionRevokeReplyLeaseOutput,
   ExperimentalSessionSkillInput,
   ExperimentalSessionSkillOutput,
   ExperimentalSessionWaitInput,
@@ -862,6 +866,23 @@ const EndpointExperimentalSessionActiveSteer =
       ),
     )
 
+const EndpointExperimentalSessionInstallReplyLease =
+  (raw: RawClient["server.session"]) => (input: ExperimentalSessionInstallReplyLeaseInput) =>
+    preserveEffect<ExperimentalSessionInstallReplyLeaseOutput>()(
+      raw["experimental.session.installReplyLease"]({
+        params: { sessionID: input["sessionID"] },
+        payload: { source: input["source"], eventId: input["eventId"], replyKey: input["replyKey"] },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalSessionRevokeReplyLease =
+  (raw: RawClient["server.session"]) => (input: ExperimentalSessionRevokeReplyLeaseInput) =>
+    preserveEffect<ExperimentalSessionRevokeReplyLeaseOutput>()(
+      raw["experimental.session.revokeReplyLease"]({ params: { sessionID: input["sessionID"] } }).pipe(
+        Effect.mapError(mapClientError),
+      ),
+    )
+
 const EndpointExperimentalSessionSkill = (raw: RawClient["server.session"]) => (input: ExperimentalSessionSkillInput) =>
   preserveEffect<ExperimentalSessionSkillOutput>()(
     raw["session.skill"]({
@@ -920,6 +941,8 @@ const adaptGroupExperimentalSession = (raw: RawClient["server.session"]) => ({
   export: EndpointExperimentalSessionExport(raw),
   activeExecution: EndpointExperimentalSessionActiveExecution(raw),
   activeSteer: EndpointExperimentalSessionActiveSteer(raw),
+  installReplyLease: EndpointExperimentalSessionInstallReplyLease(raw),
+  revokeReplyLease: EndpointExperimentalSessionRevokeReplyLease(raw),
   skill: EndpointExperimentalSessionSkill(raw),
   wait: EndpointExperimentalSessionWait(raw),
   instructions: {

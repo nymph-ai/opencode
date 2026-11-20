@@ -95,6 +95,10 @@ import type {
   ExperimentalSessionActiveExecutionOutput,
   ExperimentalSessionActiveSteerInput,
   ExperimentalSessionActiveSteerOutput,
+  ExperimentalSessionInstallReplyLeaseInput,
+  ExperimentalSessionInstallReplyLeaseOutput,
+  ExperimentalSessionRevokeReplyLeaseInput,
+  ExperimentalSessionRevokeReplyLeaseOutput,
   ExperimentalSessionSkillInput,
   ExperimentalSessionSkillOutput,
   ExperimentalSessionWaitInput,
@@ -1134,6 +1138,29 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
+        installReplyLease: (input: ExperimentalSessionInstallReplyLeaseInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSessionInstallReplyLeaseOutput>(
+            {
+              method: "PUT",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/fabric-reply`,
+              body: { source: input["source"], eventId: input["eventId"], replyKey: input["replyKey"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        revokeReplyLease: (input: ExperimentalSessionRevokeReplyLeaseInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSessionRevokeReplyLeaseOutput>(
+            {
+              method: "DELETE",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/fabric-reply`,
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404],
+              empty: true,
+            },
+            requestOptions,
+          ),
         skill: (input: ExperimentalSessionSkillInput, requestOptions?: RequestOptions) =>
           request<ExperimentalSessionSkillOutput>(
             {

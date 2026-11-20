@@ -589,6 +589,23 @@ export type ExperimentalSessionActiveSteerOperation<E = never> = (
   input: ExperimentalSessionActiveSteerInput,
 ) => Effect.Effect<ExperimentalSessionActiveSteerOutput, E>
 
+export type ExperimentalSessionInstallReplyLeaseInput = {
+  readonly sessionID: Session.ID
+  readonly source: string
+  readonly eventId: string
+  readonly replyKey: string
+}
+export type ExperimentalSessionInstallReplyLeaseOutput = void
+export type ExperimentalSessionInstallReplyLeaseOperation<E = never> = (
+  input: ExperimentalSessionInstallReplyLeaseInput,
+) => Effect.Effect<ExperimentalSessionInstallReplyLeaseOutput, E>
+
+export type ExperimentalSessionRevokeReplyLeaseInput = { readonly sessionID: Session.ID }
+export type ExperimentalSessionRevokeReplyLeaseOutput = void
+export type ExperimentalSessionRevokeReplyLeaseOperation<E = never> = (
+  input: ExperimentalSessionRevokeReplyLeaseInput,
+) => Effect.Effect<ExperimentalSessionRevokeReplyLeaseOutput, E>
+
 export type ExperimentalSessionSkillInput = {
   readonly sessionID: Session.ID
   readonly id: Skill.ID
@@ -1468,6 +1485,8 @@ export interface ExperimentalSessionApi<E = never> {
   readonly export: ExperimentalSessionExportOperation<E>
   readonly activeExecution: ExperimentalSessionActiveExecutionOperation<E>
   readonly activeSteer: ExperimentalSessionActiveSteerOperation<E>
+  readonly installReplyLease: ExperimentalSessionInstallReplyLeaseOperation<E>
+  readonly revokeReplyLease: ExperimentalSessionRevokeReplyLeaseOperation<E>
   readonly skill: ExperimentalSessionSkillOperation<E>
   readonly wait: ExperimentalSessionWaitOperation<E>
   readonly instructions: {

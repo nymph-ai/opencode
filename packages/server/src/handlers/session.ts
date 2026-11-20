@@ -1,4 +1,5 @@
 import { Instance } from "@opencode/core/instance/service"
+import { SessionReply } from "@opencode/core/mcp/session-reply"
 import { Session } from "@opencode/core/session"
 import { SessionStats } from "@opencode/core/session/stats"
 import { SessionTitle } from "@opencode/core/session/title"
@@ -327,6 +328,29 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               locationErrors,
             )
           return { data }
+        }),
+      )
+      .handle(
+        "experimental.session.installReplyLease",
+        Effect.fn(function* (ctx) {
+          const reply = yield* SessionReply.Service
+          yield* reply
+            .install(ctx.params.sessionID, ctx.payload)
+            .pipe(
+              Effect.catchTag(
+                "SessionReply.Unavailable",
+                (error) => new InvalidRequestError({ message: error.message }),
+              ),
+            )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "experimental.session.revokeReplyLease",
+        Effect.fn(function* (ctx) {
+          const reply = yield* SessionReply.Service
+          yield* reply.revoke(ctx.params.sessionID)
+          return HttpApiSchema.NoContent.make()
         }),
       )
       .handle(

@@ -3994,6 +3994,19 @@ export type ExperimentalSessionActiveSteerInput = {
 
 export type ExperimentalSessionActiveSteerOutput = { data: SessionInboxUser }["data"]
 
+export type ExperimentalSessionInstallReplyLeaseInput = {
+  readonly sessionID: string
+  readonly source: string
+  readonly eventId: string
+  readonly replyKey: string
+}
+
+export type ExperimentalSessionInstallReplyLeaseOutput = void
+
+export type ExperimentalSessionRevokeReplyLeaseInput = { readonly sessionID: string }
+
+export type ExperimentalSessionRevokeReplyLeaseOutput = void
+
 export type ExperimentalSessionSkillInput = {
   readonly sessionID: string
   readonly id: string
