@@ -82,7 +82,11 @@ const layer = Layer.effect(
           path.relative(project.directory, input.location.directory).replaceAll("\\", "/"),
         )
         const messages = input.data.messages.filter(isSettled).map((message, index) => {
-          const encoded = encodeMessage(message)
+          // Serialized input can carry transcript text and user metadata, but
+          // only our internal outbox assigns a local completion origin.
+          const encoded = encodeMessage(
+            message.type === "synthetic" ? { ...message, experimental: undefined } : message,
+          )
           const { id: _, type, ...data } = encoded
           return {
             id: message.id,

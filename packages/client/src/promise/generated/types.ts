@@ -95,8 +95,6 @@ export type SkillName = string
 
 export type SessionInboxDelivery = "steer" | "queue"
 
-export type SessionInboxSyntheticPayload = { text: string; description?: string; metadata?: { [x: string]: JsonValue } }
-
 export type SessionInboxCompactionPayload = {}
 
 export type ShellID = string
@@ -165,8 +163,6 @@ export type WorkspaceID = string
 export type InstructionKey = string
 
 export type InstructionHash = string
-
-export type SessionInboxSyntheticPayload1 = { text: string; description?: string; metadata?: { [x: string]: any } }
 
 export type SessionMessageNative1 = { [x: string]: any }
 
@@ -423,6 +419,12 @@ export type SessionForkBoundary =
   | { type: "before"; messageID: SessionMessageID }
   | { type: "through"; messageID: SessionMessageID }
 
+export type SessionMessageSubagentCompletionOrigin = {
+  parentSessionID: SessionID
+  childSessionID: SessionID
+  notificationID: SessionMessageID
+}
+
 export type SessionMessageAgentSelected = {
   id: SessionMessageID
   metadata?: { [x: string]: JsonValue }
@@ -430,15 +432,6 @@ export type SessionMessageAgentSelected = {
   type: "agent-switched"
   agent: AgentID
   previous?: AgentID
-}
-
-export type SessionMessageSynthetic = {
-  id: SessionMessageID
-  metadata?: { [x: string]: JsonValue }
-  time: { created: number }
-  text: string
-  description?: string
-  type: "synthetic"
 }
 
 export type SessionMessageSystem = {
@@ -505,15 +498,6 @@ export type SkillInfo = {
   autoinvoke?: boolean
   path: AbsolutePath
   content: string
-}
-
-export type SessionInboxSynthetic = {
-  id: SessionMessageID
-  sessionID: SessionID
-  time: { created: number }
-  type: "synthetic"
-  payload: SessionInboxSyntheticPayload
-  delivery: SessionInboxDelivery
 }
 
 export type SessionInboxCompaction = {
@@ -1121,6 +1105,30 @@ export type ModelVariant = {
 export type PermissionRuleset = Array<PermissionRule>
 
 export type AutomationActionPrompt = { type: "prompt"; prompt: string; to: AutomationTarget }
+
+export type SessionInboxSyntheticPayload = {
+  text: string
+  description?: string
+  metadata?: { [x: string]: JsonValue }
+  experimental?: { subagentCompletion?: SessionMessageSubagentCompletionOrigin }
+}
+
+export type SessionMessageSynthetic = {
+  id: SessionMessageID
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number }
+  text: string
+  description?: string
+  experimental?: { subagentCompletion?: SessionMessageSubagentCompletionOrigin }
+  type: "synthetic"
+}
+
+export type SessionInboxSyntheticPayload1 = {
+  text: string
+  description?: string
+  metadata?: { [x: string]: any }
+  experimental?: { subagentCompletion?: SessionMessageSubagentCompletionOrigin }
+}
 
 export type UsageLimitsBudget = {
   id: string
@@ -2655,6 +2663,15 @@ export type ConfigEntry =
   | { type: "directory"; path: AbsolutePath }
 
 export type AutomationAction = AutomationActionPrompt | AutomationActionCode
+
+export type SessionInboxSynthetic = {
+  id: SessionMessageID
+  sessionID: SessionID
+  time: { created: number }
+  type: "synthetic"
+  payload: SessionInboxSyntheticPayload
+  delivery: SessionInboxDelivery
+}
 
 export type UsageLimitsInfo = {
   workspace: { id: string; name?: string; usageURL: string }

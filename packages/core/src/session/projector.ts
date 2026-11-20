@@ -229,6 +229,8 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
 
     const values = yield* Effect.forEach(rows, (row) =>
       Effect.gen(function* () {
+        // A fork copies transcript text, but does not own the source's child.
+        const data = row.type === "synthetic" ? { ...row.data, experimental: undefined } : row.data
         const copy = {
           id: forkedID(row.seq),
           session_id: event.data.sessionID,
@@ -237,7 +239,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
           time_created: row.time_created,
           time_updated: row.time_updated,
           // Split parents' envelopes carry no content, so only unsplit parents' inline media moves here.
-          data: media ? yield* SessionBlob.externalizeRow(db, row.data) : row.data,
+          data: media ? yield* SessionBlob.externalizeRow(db, data) : data,
         }
         // A summary references the first message it kept, which the fork copied under a new ID.
         const keepID = row.type === "compaction" ? row.data.metadata?.keepID : undefined
@@ -1045,6 +1047,7 @@ const layer = Layer.effectDiscard(
             text: input.payload.text,
             description: input.payload.description,
             metadata: input.payload.metadata,
+            experimental: input.payload.experimental,
             time,
           })
       }),

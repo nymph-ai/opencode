@@ -18,6 +18,7 @@ export interface SyntheticSession<E = never> {
     readonly text: string
     readonly description?: string
     readonly metadata?: SessionSchema.Metadata
+    readonly experimental?: SessionMessage.Synthetic["experimental"]
   }) => Effect.Effect<unknown, E>
 }
 
@@ -71,7 +72,18 @@ export const deliver = Effect.fnUntraced(function* <E>(
   const state = input.status === "completed" && recovery.outstanding?.length ? "running" : input.status
   const formatted = formatBody(body, recovery.childSessionID, recovery.outstanding)
   yield* sessions.synthetic({
-    ...(input.notificationID ? { id: input.notificationID } : {}),
+    ...(input.notificationID
+      ? {
+          id: input.notificationID,
+          experimental: {
+            subagentCompletion: {
+              parentSessionID: recovery.parentSessionID,
+              childSessionID: recovery.childSessionID,
+              notificationID: input.notificationID,
+            },
+          },
+        }
+      : {}),
     sessionID: recovery.parentSessionID,
     description: recovery.description,
     text: `<subagent sessionID="${recovery.childSessionID}" state="${state}" description="${recovery.description}">\n${formatted}\n</subagent>`,

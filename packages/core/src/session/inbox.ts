@@ -160,9 +160,21 @@ const promotedFromMessage = Effect.fn("SessionInbox.promotedFromMessage")(functi
         text: message.text,
         description: message.description,
         metadata: message.metadata,
+        experimental: message.experimental,
       }),
     })
 })
+
+// The ordinary first-writer rule must not consume a trusted outbox report
+// when its ID already belongs to an unrelated synthetic message.
+function retainsSubagentCompletion(info: Info, origin: SessionMessage.SubagentCompletionOrigin) {
+  const existing = info.type === "synthetic" ? info.payload.experimental?.subagentCompletion : undefined
+  return (
+    existing?.parentSessionID === origin.parentSessionID &&
+    existing.childSessionID === origin.childSessionID &&
+    existing.notificationID === origin.notificationID
+  )
+}
 
 export type Interface = Effect.Success<ReturnType<typeof make>>
 
@@ -193,8 +205,16 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     readonly sessionID: SessionSchema.ID
     readonly item: Item & { readonly type: Type }
   }) {
+    const item: Item = request.item
+    const origin = item.type === "synthetic" ? item.payload.experimental?.subagentCompletion : undefined
+    if (origin && (origin.parentSessionID !== request.sessionID || origin.notificationID !== request.id))
+      return yield* new LifecycleConflict({ id: request.id })
     const existing = yield* reconcile({ ...request, type: request.item.type, delivery: request.item.delivery })
-    if (existing !== undefined) return existing
+    if (existing !== undefined) {
+      if (origin && !retainsSubagentCompletion(existing, origin))
+        return yield* new LifecycleConflict({ id: request.id })
+      return existing
+    }
     const admitted = yield* bus
       .publish(SessionEvent.InboxEnqueued, {
         inboxID: request.id,
@@ -218,7 +238,10 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
             : Effect.die(defect),
         ),
       )
-    if (!matches(admitted, { ...request, type: request.item.type }))
+    if (
+      !matches(admitted, { ...request, type: request.item.type }) ||
+      (origin && !retainsSubagentCompletion(admitted, origin))
+    )
       return yield* new LifecycleConflict({ id: request.id })
     return admitted
   })

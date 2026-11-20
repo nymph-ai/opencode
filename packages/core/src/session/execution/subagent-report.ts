@@ -90,6 +90,7 @@ export const make = (deps: Deps) => {
                 text: notice.text,
                 description: notice.description,
                 metadata: notice.metadata,
+                experimental: notice.experimental,
               }),
               delivery: "steer",
             },

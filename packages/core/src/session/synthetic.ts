@@ -18,6 +18,7 @@ export const make = (
     text: string
     description?: string
     metadata?: Record<string, unknown>
+    experimental?: SessionMessage.Synthetic["experimental"]
     delivery?: SessionInbox.Delivery
     resume?: boolean
   }) {
@@ -38,6 +39,7 @@ export const make = (
             text: input.text,
             description: input.description,
             metadata: input.metadata,
+            experimental: input.experimental,
           }),
         },
       })

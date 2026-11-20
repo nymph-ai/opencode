@@ -12,6 +12,7 @@ import { ascending } from "./identifier.js"
 import { Shell as ShellSchema } from "./shell.js"
 import { FinishReason } from "./llm.js"
 import { SessionError } from "./session-error.js"
+import { SessionID } from "./session-id.js"
 import { Agent } from "./agent.js"
 import { Skill as SkillSchema } from "./skill.js"
 import { Money } from "./money.js"
@@ -90,11 +91,21 @@ export const MediaUser = Schema.Struct({
   files: Schema.Array(Attachment).pipe(optional),
 }).annotate({ identifier: "Session.Message.MediaUser" })
 
+export interface SubagentCompletionOrigin extends Schema.Schema.Type<typeof SubagentCompletionOrigin> {}
+export const SubagentCompletionOrigin = Schema.Struct({
+  parentSessionID: SessionID,
+  childSessionID: SessionID,
+  notificationID: ID,
+}).annotate({ identifier: "Session.Message.SubagentCompletionOrigin" })
+
 export interface Synthetic extends Schema.Schema.Type<typeof Synthetic> {}
 export const Synthetic = Schema.Struct({
   ...Base,
   text: Schema.String,
   description: Schema.String.pipe(optional),
+  experimental: Schema.Struct({
+    subagentCompletion: SubagentCompletionOrigin.pipe(optional),
+  }).pipe(optional),
   type: Schema.tag("synthetic"),
 }).annotate({ identifier: "Session.Message.Synthetic" })
 
