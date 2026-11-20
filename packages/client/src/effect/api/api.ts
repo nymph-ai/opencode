@@ -589,22 +589,20 @@ export type ExperimentalSessionActiveSteerOperation<E = never> = (
   input: ExperimentalSessionActiveSteerInput,
 ) => Effect.Effect<ExperimentalSessionActiveSteerOutput, E>
 
-export type ExperimentalSessionInstallReplyLeaseInput = {
+export type ExperimentalSessionAttachReplyLeaseInput = {
   readonly sessionID: Session.ID
-  readonly source: string
-  readonly eventId: string
-  readonly replyKey: string
+  readonly scope: { readonly source: string; readonly eventId: string; readonly replyKey: string } | null
 }
-export type ExperimentalSessionInstallReplyLeaseOutput = void
-export type ExperimentalSessionInstallReplyLeaseOperation<E = never> = (
-  input: ExperimentalSessionInstallReplyLeaseInput,
-) => Effect.Effect<ExperimentalSessionInstallReplyLeaseOutput, E>
+export type ExperimentalSessionAttachReplyLeaseOutput = { readonly generation: string | null }
+export type ExperimentalSessionAttachReplyLeaseOperation<E = never> = (
+  input: ExperimentalSessionAttachReplyLeaseInput,
+) => Effect.Effect<ExperimentalSessionAttachReplyLeaseOutput, E>
 
-export type ExperimentalSessionRevokeReplyLeaseInput = { readonly sessionID: Session.ID }
-export type ExperimentalSessionRevokeReplyLeaseOutput = void
-export type ExperimentalSessionRevokeReplyLeaseOperation<E = never> = (
-  input: ExperimentalSessionRevokeReplyLeaseInput,
-) => Effect.Effect<ExperimentalSessionRevokeReplyLeaseOutput, E>
+export type ExperimentalSessionCloseReplyLeaseInput = { readonly sessionID: Session.ID; readonly generation: string }
+export type ExperimentalSessionCloseReplyLeaseOutput = { readonly revoked: boolean }
+export type ExperimentalSessionCloseReplyLeaseOperation<E = never> = (
+  input: ExperimentalSessionCloseReplyLeaseInput,
+) => Effect.Effect<ExperimentalSessionCloseReplyLeaseOutput, E>
 
 export type ExperimentalSessionSkillInput = {
   readonly sessionID: Session.ID
@@ -1485,8 +1483,8 @@ export interface ExperimentalSessionApi<E = never> {
   readonly export: ExperimentalSessionExportOperation<E>
   readonly activeExecution: ExperimentalSessionActiveExecutionOperation<E>
   readonly activeSteer: ExperimentalSessionActiveSteerOperation<E>
-  readonly installReplyLease: ExperimentalSessionInstallReplyLeaseOperation<E>
-  readonly revokeReplyLease: ExperimentalSessionRevokeReplyLeaseOperation<E>
+  readonly attachReplyLease: ExperimentalSessionAttachReplyLeaseOperation<E>
+  readonly closeReplyLease: ExperimentalSessionCloseReplyLeaseOperation<E>
   readonly skill: ExperimentalSessionSkillOperation<E>
   readonly wait: ExperimentalSessionWaitOperation<E>
   readonly instructions: {

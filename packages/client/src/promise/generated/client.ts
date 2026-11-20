@@ -95,10 +95,10 @@ import type {
   ExperimentalSessionActiveExecutionOutput,
   ExperimentalSessionActiveSteerInput,
   ExperimentalSessionActiveSteerOutput,
-  ExperimentalSessionInstallReplyLeaseInput,
-  ExperimentalSessionInstallReplyLeaseOutput,
-  ExperimentalSessionRevokeReplyLeaseInput,
-  ExperimentalSessionRevokeReplyLeaseOutput,
+  ExperimentalSessionAttachReplyLeaseInput,
+  ExperimentalSessionAttachReplyLeaseOutput,
+  ExperimentalSessionCloseReplyLeaseInput,
+  ExperimentalSessionCloseReplyLeaseOutput,
   ExperimentalSessionSkillInput,
   ExperimentalSessionSkillOutput,
   ExperimentalSessionWaitInput,
@@ -1138,26 +1138,27 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
-        installReplyLease: (input: ExperimentalSessionInstallReplyLeaseInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalSessionInstallReplyLeaseOutput>(
+        attachReplyLease: (input: ExperimentalSessionAttachReplyLeaseInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSessionAttachReplyLeaseOutput>(
             {
               method: "PUT",
               path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/fabric-reply`,
-              body: { source: input["source"], eventId: input["eventId"], replyKey: input["replyKey"] },
-              successStatus: 204,
+              body: { scope: input["scope"] },
+              successStatus: 200,
               declaredStatuses: [400, 401, 404],
-              empty: true,
+              empty: false,
             },
             requestOptions,
           ),
-        revokeReplyLease: (input: ExperimentalSessionRevokeReplyLeaseInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalSessionRevokeReplyLeaseOutput>(
+        closeReplyLease: (input: ExperimentalSessionCloseReplyLeaseInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSessionCloseReplyLeaseOutput>(
             {
               method: "DELETE",
               path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/fabric-reply`,
-              successStatus: 204,
+              query: { generation: input["generation"] },
+              successStatus: 200,
               declaredStatuses: [400, 401, 404],
-              empty: true,
+              empty: false,
             },
             requestOptions,
           ),

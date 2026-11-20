@@ -3,6 +3,7 @@ export * as SessionReply from "./session-reply.js"
 import { Tool } from "@opencode/schema/tool"
 import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Exit, Layer, Schema, Scope } from "effect"
+import { randomUUID } from "node:crypto"
 import { isAbsolute } from "node:path"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { Environment } from "../environment/index.js"
@@ -17,16 +18,19 @@ export class Unavailable extends Schema.TaggedError<Unavailable>()("SessionReply
   message: Schema.String,
 }) {}
 
+type EventScope = {
+  readonly source: string
+  readonly eventId: string
+  readonly replyKey: string
+}
+
 export interface Interface {
-  readonly install: (
+  readonly install: (owner: SessionSchema.ID, event: EventScope | null) => Effect.Effect<string | null, Unavailable>
+  readonly close: (
     owner: SessionSchema.ID,
-    event: {
-      readonly source: string
-      readonly eventId: string
-      readonly replyKey: string
-    },
-  ) => Effect.Effect<void, Unavailable>
-  readonly revoke: (owner: SessionSchema.ID) => Effect.Effect<void>
+    generation: string,
+    interrupt: Effect.Effect<boolean>,
+  ) => Effect.Effect<boolean>
   readonly tool: (owner: SessionSchema.ID) => Tool.Info | undefined
 }
 
@@ -35,6 +39,7 @@ const input = Schema.Struct({ replyId: Schema.NonEmptyString, text: Schema.NonEm
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionReply") {}
 
 type Lease = {
+  readonly generation: string
   readonly scope: Scope.Closeable
   readonly connection: McpClient.Connection
   readonly location: Location.Interface
@@ -78,6 +83,10 @@ const layer = Layer.effect(
         owners.locks.withLock(owner)(
           Effect.uninterruptibleMask((restore) =>
             Effect.gen(function* () {
+              if (event === null) {
+                yield* remove(owner)
+                return null
+              }
               if (!helper || !socket || !isAbsolute(helper) || !isAbsolute(socket) || location.workspaceID)
                 return yield* new Unavailable({ message: "The local Fabric reply helper is disabled" })
               if (
@@ -103,7 +112,7 @@ const layer = Layer.effect(
                       protocol: "legacy",
                     },
                   })
-                  const lease = { scope, connection, location, live: true }
+                  const lease = { generation: randomUUID(), scope, connection, location, live: true }
                   connection.onClose(() => {
                     lease.live = false
                   })
@@ -124,10 +133,21 @@ const layer = Layer.effect(
                 ),
               ).pipe(Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(scope, Exit.void) : Effect.void)))
               owners.leases.set(owner, lease)
+              return lease.generation
             }),
           ),
         ),
-      revoke: (owner) => owners.locks.withLock(owner)(remove(owner).pipe(Effect.uninterruptible)),
+      close: (owner, generation, interrupt) =>
+        owners.locks.withLock(owner)(
+          Effect.gen(function* () {
+            const lease = owners.leases.get(owner)
+            if (lease?.generation !== generation) return false
+            owners.leases.delete(owner)
+            // Stop work before closing the helper or admitting a successor attachment.
+            yield* interrupt.pipe(Effect.ensuring(Scope.close(lease.scope, Exit.void)))
+            return true
+          }).pipe(Effect.uninterruptible),
+        ),
       tool: (owner) => {
         const lease = owners.leases.get(owner)
         if (!lease?.live || lease.location !== location) return

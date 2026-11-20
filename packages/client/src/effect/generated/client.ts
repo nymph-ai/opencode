@@ -101,10 +101,10 @@ import type {
   ExperimentalSessionActiveExecutionOutput,
   ExperimentalSessionActiveSteerInput,
   ExperimentalSessionActiveSteerOutput,
-  ExperimentalSessionInstallReplyLeaseInput,
-  ExperimentalSessionInstallReplyLeaseOutput,
-  ExperimentalSessionRevokeReplyLeaseInput,
-  ExperimentalSessionRevokeReplyLeaseOutput,
+  ExperimentalSessionAttachReplyLeaseInput,
+  ExperimentalSessionAttachReplyLeaseOutput,
+  ExperimentalSessionCloseReplyLeaseInput,
+  ExperimentalSessionCloseReplyLeaseOutput,
   ExperimentalSessionSkillInput,
   ExperimentalSessionSkillOutput,
   ExperimentalSessionWaitInput,
@@ -866,21 +866,22 @@ const EndpointExperimentalSessionActiveSteer =
       ),
     )
 
-const EndpointExperimentalSessionInstallReplyLease =
-  (raw: RawClient["server.session"]) => (input: ExperimentalSessionInstallReplyLeaseInput) =>
-    preserveEffect<ExperimentalSessionInstallReplyLeaseOutput>()(
-      raw["experimental.session.installReplyLease"]({
+const EndpointExperimentalSessionAttachReplyLease =
+  (raw: RawClient["server.session"]) => (input: ExperimentalSessionAttachReplyLeaseInput) =>
+    preserveEffect<ExperimentalSessionAttachReplyLeaseOutput>()(
+      raw["experimental.session.attachReplyLease"]({
         params: { sessionID: input["sessionID"] },
-        payload: { source: input["source"], eventId: input["eventId"], replyKey: input["replyKey"] },
+        payload: { scope: input["scope"] },
       }).pipe(Effect.mapError(mapClientError)),
     )
 
-const EndpointExperimentalSessionRevokeReplyLease =
-  (raw: RawClient["server.session"]) => (input: ExperimentalSessionRevokeReplyLeaseInput) =>
-    preserveEffect<ExperimentalSessionRevokeReplyLeaseOutput>()(
-      raw["experimental.session.revokeReplyLease"]({ params: { sessionID: input["sessionID"] } }).pipe(
-        Effect.mapError(mapClientError),
-      ),
+const EndpointExperimentalSessionCloseReplyLease =
+  (raw: RawClient["server.session"]) => (input: ExperimentalSessionCloseReplyLeaseInput) =>
+    preserveEffect<ExperimentalSessionCloseReplyLeaseOutput>()(
+      raw["experimental.session.closeReplyLease"]({
+        params: { sessionID: input["sessionID"] },
+        query: { generation: input["generation"] },
+      }).pipe(Effect.mapError(mapClientError)),
     )
 
 const EndpointExperimentalSessionSkill = (raw: RawClient["server.session"]) => (input: ExperimentalSessionSkillInput) =>
@@ -941,8 +942,8 @@ const adaptGroupExperimentalSession = (raw: RawClient["server.session"]) => ({
   export: EndpointExperimentalSessionExport(raw),
   activeExecution: EndpointExperimentalSessionActiveExecution(raw),
   activeSteer: EndpointExperimentalSessionActiveSteer(raw),
-  installReplyLease: EndpointExperimentalSessionInstallReplyLease(raw),
-  revokeReplyLease: EndpointExperimentalSessionRevokeReplyLease(raw),
+  attachReplyLease: EndpointExperimentalSessionAttachReplyLease(raw),
+  closeReplyLease: EndpointExperimentalSessionCloseReplyLease(raw),
   skill: EndpointExperimentalSessionSkill(raw),
   wait: EndpointExperimentalSessionWait(raw),
   instructions: {

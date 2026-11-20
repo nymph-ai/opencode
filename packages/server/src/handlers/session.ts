@@ -331,26 +331,27 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
-        "experimental.session.installReplyLease",
+        "experimental.session.attachReplyLease",
         Effect.fn(function* (ctx) {
           const reply = yield* SessionReply.Service
-          yield* reply
-            .install(ctx.params.sessionID, ctx.payload)
+          const generation = yield* reply
+            .install(ctx.params.sessionID, ctx.payload.scope)
             .pipe(
               Effect.catchTag(
                 "SessionReply.Unavailable",
                 (error) => new InvalidRequestError({ message: error.message }),
               ),
             )
-          return HttpApiSchema.NoContent.make()
+          return { generation }
         }),
       )
       .handle(
-        "experimental.session.revokeReplyLease",
+        "experimental.session.closeReplyLease",
         Effect.fn(function* (ctx) {
           const reply = yield* SessionReply.Service
-          yield* reply.revoke(ctx.params.sessionID)
-          return HttpApiSchema.NoContent.make()
+          const id = ctx.params.sessionID
+          const revoked = yield* reply.close(id, ctx.query.generation, session.interrupt(id, { resume: false }))
+          return { revoked }
         }),
       )
       .handle(
