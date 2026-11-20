@@ -379,7 +379,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     )
     .add(
       HttpApiEndpoint.put(
-        "experimental.session.attachReplyLease",
+        "experimental.session.attachReplyRoute",
         "/api/experimental/session/:sessionID/fabric-reply",
         {
           params: { sessionID: Session.ID },
@@ -388,37 +388,38 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
               Schema.Struct({ source: Schema.String, eventId: Schema.String, replyKey: Schema.String }),
             ),
           }),
-          success: Schema.Struct({ generation: Schema.NullOr(ReplyLeaseGeneration) }),
+          success: Schema.Struct({ generation: ReplyLeaseGeneration }),
           error: InvalidRequestError,
         },
       )
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "experimental.session.attachReplyLease",
+            identifier: "experimental.session.attachReplyRoute",
             summary: "Set the Fabric reply scope for an attachment",
             description:
-              "Open the host-pinned reply helper for this session and event and return its generation. A null scope attaches without a lease. Experimental: may change without compatibility guarantees.",
+              "Return the attachment generation. Open the host-pinned reply helper if an event scope is supplied. Experimental: may change without compatibility guarantees.",
           }),
         ),
     )
     .add(
       HttpApiEndpoint.delete(
-        "experimental.session.closeReplyLease",
+        "experimental.session.closeReplyRoute",
         "/api/experimental/session/:sessionID/fabric-reply",
         {
           params: { sessionID: Session.ID },
           query: Schema.Struct({ generation: ReplyLeaseGeneration }),
-          success: Schema.Struct({ revoked: Schema.Boolean }),
+          payload: Schema.Struct({ pending: Schema.Array(SessionMessage.ID) }),
+          success: Schema.Struct({ closed: Schema.Boolean }),
         },
       )
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "experimental.session.closeReplyLease",
-            summary: "Close an owned Fabric reply lease",
+            identifier: "experimental.session.closeReplyRoute",
+            summary: "Close a Fabric attachment using its generation",
             description:
-              "Withdraw this session's reply tool and interrupt work only if the lease generation still matches. Experimental: may change without compatibility guarantees.",
+              "Interrupt work, withdraw pending input, and remove the reply tool only when the attachment generation still matches. Experimental: may change without compatibility guarantees.",
           }),
         ),
     )

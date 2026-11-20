@@ -3994,16 +3994,20 @@ export type ExperimentalSessionActiveSteerInput = {
 
 export type ExperimentalSessionActiveSteerOutput = { data: SessionInboxUser }["data"]
 
-export type ExperimentalSessionAttachReplyLeaseInput = {
+export type ExperimentalSessionAttachReplyRouteInput = {
   readonly sessionID: string
   readonly scope: { readonly source: string; readonly eventId: string; readonly replyKey: string } | null
 }
 
-export type ExperimentalSessionAttachReplyLeaseOutput = { generation: string | null }
+export type ExperimentalSessionAttachReplyRouteOutput = { generation: string }
 
-export type ExperimentalSessionCloseReplyLeaseInput = { readonly sessionID: string; readonly generation: string }
+export type ExperimentalSessionCloseReplyRouteInput = {
+  readonly sessionID: string
+  readonly generation: string
+  readonly pending: ReadonlyArray<string>
+}
 
-export type ExperimentalSessionCloseReplyLeaseOutput = { revoked: boolean }
+export type ExperimentalSessionCloseReplyRouteOutput = { closed: boolean }
 
 export type ExperimentalSessionSkillInput = {
   readonly sessionID: string

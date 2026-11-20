@@ -589,20 +589,24 @@ export type ExperimentalSessionActiveSteerOperation<E = never> = (
   input: ExperimentalSessionActiveSteerInput,
 ) => Effect.Effect<ExperimentalSessionActiveSteerOutput, E>
 
-export type ExperimentalSessionAttachReplyLeaseInput = {
+export type ExperimentalSessionAttachReplyRouteInput = {
   readonly sessionID: Session.ID
   readonly scope: { readonly source: string; readonly eventId: string; readonly replyKey: string } | null
 }
-export type ExperimentalSessionAttachReplyLeaseOutput = { readonly generation: string | null }
-export type ExperimentalSessionAttachReplyLeaseOperation<E = never> = (
-  input: ExperimentalSessionAttachReplyLeaseInput,
-) => Effect.Effect<ExperimentalSessionAttachReplyLeaseOutput, E>
+export type ExperimentalSessionAttachReplyRouteOutput = { readonly generation: string }
+export type ExperimentalSessionAttachReplyRouteOperation<E = never> = (
+  input: ExperimentalSessionAttachReplyRouteInput,
+) => Effect.Effect<ExperimentalSessionAttachReplyRouteOutput, E>
 
-export type ExperimentalSessionCloseReplyLeaseInput = { readonly sessionID: Session.ID; readonly generation: string }
-export type ExperimentalSessionCloseReplyLeaseOutput = { readonly revoked: boolean }
-export type ExperimentalSessionCloseReplyLeaseOperation<E = never> = (
-  input: ExperimentalSessionCloseReplyLeaseInput,
-) => Effect.Effect<ExperimentalSessionCloseReplyLeaseOutput, E>
+export type ExperimentalSessionCloseReplyRouteInput = {
+  readonly sessionID: Session.ID
+  readonly generation: string
+  readonly pending: ReadonlyArray<SessionMessage.ID>
+}
+export type ExperimentalSessionCloseReplyRouteOutput = { readonly closed: boolean }
+export type ExperimentalSessionCloseReplyRouteOperation<E = never> = (
+  input: ExperimentalSessionCloseReplyRouteInput,
+) => Effect.Effect<ExperimentalSessionCloseReplyRouteOutput, E>
 
 export type ExperimentalSessionSkillInput = {
   readonly sessionID: Session.ID
@@ -1483,8 +1487,8 @@ export interface ExperimentalSessionApi<E = never> {
   readonly export: ExperimentalSessionExportOperation<E>
   readonly activeExecution: ExperimentalSessionActiveExecutionOperation<E>
   readonly activeSteer: ExperimentalSessionActiveSteerOperation<E>
-  readonly attachReplyLease: ExperimentalSessionAttachReplyLeaseOperation<E>
-  readonly closeReplyLease: ExperimentalSessionCloseReplyLeaseOperation<E>
+  readonly attachReplyRoute: ExperimentalSessionAttachReplyRouteOperation<E>
+  readonly closeReplyRoute: ExperimentalSessionCloseReplyRouteOperation<E>
   readonly skill: ExperimentalSessionSkillOperation<E>
   readonly wait: ExperimentalSessionWaitOperation<E>
   readonly instructions: {

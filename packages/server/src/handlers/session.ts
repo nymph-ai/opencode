@@ -331,11 +331,11 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
-        "experimental.session.attachReplyLease",
+        "experimental.session.attachReplyRoute",
         Effect.fn(function* (ctx) {
           const reply = yield* SessionReply.Service
           const generation = yield* reply
-            .install(ctx.params.sessionID, ctx.payload.scope)
+            .attach(ctx.params.sessionID, ctx.payload.scope)
             .pipe(
               Effect.catchTag(
                 "SessionReply.Unavailable",
@@ -346,12 +346,16 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
-        "experimental.session.closeReplyLease",
+        "experimental.session.closeReplyRoute",
         Effect.fn(function* (ctx) {
           const reply = yield* SessionReply.Service
           const id = ctx.params.sessionID
-          const revoked = yield* reply.close(id, ctx.query.generation, session.interrupt(id, { resume: false }))
-          return { revoked }
+          const stop = Effect.gen(function* () {
+            yield* session.interrupt(id, { resume: false })
+            for (const inboxID of ctx.payload.pending)
+              yield* session.cancelInbox({ sessionID: id, inboxID }).pipe(Effect.ignore)
+          })
+          return { closed: yield* reply.close(id, ctx.query.generation, stop) }
         }),
       )
       .handle(

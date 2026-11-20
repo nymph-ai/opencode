@@ -25,12 +25,8 @@ type EventScope = {
 }
 
 export interface Interface {
-  readonly install: (owner: SessionSchema.ID, event: EventScope | null) => Effect.Effect<string | null, Unavailable>
-  readonly close: (
-    owner: SessionSchema.ID,
-    generation: string,
-    interrupt: Effect.Effect<boolean>,
-  ) => Effect.Effect<boolean>
+  readonly attach: (owner: SessionSchema.ID, event: EventScope | null) => Effect.Effect<string, Unavailable>
+  readonly close: (owner: SessionSchema.ID, generation: string, stop: Effect.Effect<void>) => Effect.Effect<boolean>
   readonly tool: (owner: SessionSchema.ID) => Tool.Info | undefined
 }
 
@@ -39,25 +35,29 @@ const input = Schema.Struct({ replyId: Schema.NonEmptyString, text: Schema.NonEm
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionReply") {}
 
 type Lease = {
+  readonly connection: McpClient.Connection
+  live: boolean
+}
+
+type Attachment = {
   readonly generation: string
   readonly scope: Scope.Closeable
-  readonly connection: McpClient.Connection
   readonly location: Location.Interface
-  live: boolean
+  readonly lease: Lease | undefined
 }
 
 class Owners extends Context.Service<
   Owners,
   {
-    readonly leases: Map<SessionSchema.ID, Lease>
+    readonly attachments: Map<SessionSchema.ID, Attachment>
     readonly locks: KeyedMutex.KeyedMutex<SessionSchema.ID>
   }
 >()("@opencode/SessionReplyOwners") {}
 
-// A session can move. Revocation must still find its lease in the previous location.
+// A session can move. Closure must still find its attachment in the previous location.
 const ownersNode = makeGlobalNode({
   service: Owners,
-  layer: Layer.sync(Owners, () => Owners.of({ leases: new Map(), locks: KeyedMutex.makeUnsafe() })),
+  layer: Layer.sync(Owners, () => Owners.of({ attachments: new Map(), locks: KeyedMutex.makeUnsafe() })),
   deps: [],
 })
 
@@ -71,86 +71,84 @@ const layer = Layer.effect(
     const owners = yield* Owners
     const helper = process.env.OPENCODE_FABRIC_REPLY_HELPER
     const socket = process.env.OPENCODE_FABRIC_REPLY_SOCKET
-    const remove = Effect.fnUntraced(function* (owner: SessionSchema.ID) {
-      const lease = owners.leases.get(owner)
-      if (!lease) return
-      owners.leases.delete(owner)
-      yield* Scope.close(lease.scope, Exit.void)
+    const openReply = Effect.fnUntraced(function* (owner: SessionSchema.ID, event: EventScope) {
+      if (!helper || !socket || !isAbsolute(helper) || !isAbsolute(socket) || location.workspaceID)
+        return yield* new Unavailable({ message: "The local Fabric reply helper is disabled" })
+      if (
+        !/^[0-9a-f]{64}$/i.test(event.replyKey) ||
+        [event.source, event.eventId].some((value) => value.length === 0 || value.length > 255 || value.includes("\0"))
+      )
+        return yield* new Unavailable({ message: "Invalid Fabric reply event scope" })
+      const { McpClient } = yield* Effect.promise(() => import("./client.js"))
+      const connection = yield* McpClient.connect({
+        server: toolName,
+        directory: location.directory,
+        roots: false,
+        config: {
+          type: "local",
+          command: [helper, socket, owner, event.source, event.eventId],
+          environment: { FABD_CHANNEL_REPLY_KEY: event.replyKey, FABD_CHANNEL_REPLY_OWNER_HELLO: "1" },
+          protocol: "legacy",
+        },
+      }).pipe(Effect.mapError(() => new Unavailable({ message: "The pinned Fabric reply helper is unavailable" })))
+      const lease = { connection, live: true }
+      connection.onClose(() => {
+        lease.live = false
+      })
+      const tools = yield* connection
+        .tools()
+        .pipe(Effect.mapError(() => new Unavailable({ message: "The pinned Fabric reply helper is unavailable" })))
+      if (tools.length !== 1 || tools[0]?.name !== "reply" || !lease.live)
+        return yield* new Unavailable({ message: "The pinned helper did not expose the Fabric reply tool" })
+      return lease
     })
 
     return Service.of({
-      install: (owner, event) =>
+      attach: (owner, event) =>
         owners.locks.withLock(owner)(
           Effect.uninterruptibleMask((restore) =>
             Effect.gen(function* () {
-              if (event === null) {
-                yield* remove(owner)
-                return null
-              }
-              if (!helper || !socket || !isAbsolute(helper) || !isAbsolute(socket) || location.workspaceID)
-                return yield* new Unavailable({ message: "The local Fabric reply helper is disabled" })
-              if (
-                !/^[0-9a-f]{64}$/i.test(event.replyKey) ||
-                [event.source, event.eventId].some(
-                  (value) => value.length === 0 || value.length > 255 || value.includes("\0"),
-                )
-              )
-                return yield* new Unavailable({ message: "Invalid Fabric reply event scope" })
-              yield* remove(owner)
               const scope = yield* Scope.fork(root)
-              const lease = yield* restore(
-                Effect.gen(function* () {
-                  const { McpClient } = yield* Effect.promise(() => import("./client.js"))
-                  const connection = yield* McpClient.connect({
-                    server: toolName,
-                    directory: location.directory,
-                    roots: false,
-                    config: {
-                      type: "local",
-                      command: [helper, socket, owner, event.source, event.eventId],
-                      environment: { FABD_CHANNEL_REPLY_KEY: event.replyKey, FABD_CHANNEL_REPLY_OWNER_HELLO: "1" },
-                      protocol: "legacy",
-                    },
-                  })
-                  const lease = { generation: randomUUID(), scope, connection, location, live: true }
-                  connection.onClose(() => {
-                    lease.live = false
-                  })
-                  yield* Scope.addFinalizer(
-                    scope,
-                    Effect.sync(() => {
-                      if (owners.leases.get(owner) === lease) owners.leases.delete(owner)
-                    }),
-                  )
-                  const tools = yield* connection.tools()
-                  if (tools.length !== 1 || tools[0]?.name !== "reply" || !lease.live)
-                    return yield* new Unavailable({ message: "The pinned helper did not expose the Fabric reply tool" })
-                  return lease
-                }).pipe(
-                  Scope.provide(scope),
-                  Effect.provideService(Environment.Service, environment),
-                  Effect.mapError(() => new Unavailable({ message: "The pinned Fabric reply helper is unavailable" })),
-                ),
-              ).pipe(Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(scope, Exit.void) : Effect.void)))
-              owners.leases.set(owner, lease)
-              return lease.generation
+              const lease =
+                event === null
+                  ? undefined
+                  : yield* restore(
+                      openReply(owner, event).pipe(
+                        Scope.provide(scope),
+                        Effect.provideService(Environment.Service, environment),
+                      ),
+                    ).pipe(
+                      Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(scope, Exit.void) : Effect.void)),
+                    )
+              const attachment = { generation: randomUUID(), scope, location, lease }
+              yield* Scope.addFinalizer(
+                scope,
+                Effect.sync(() => {
+                  if (owners.attachments.get(owner) === attachment) owners.attachments.delete(owner)
+                }),
+              )
+              const previous = owners.attachments.get(owner)
+              owners.attachments.set(owner, attachment)
+              if (previous) yield* Scope.close(previous.scope, Exit.void)
+              return attachment.generation
             }),
           ),
         ),
-      close: (owner, generation, interrupt) =>
+      close: (owner, generation, stop) =>
         owners.locks.withLock(owner)(
           Effect.gen(function* () {
-            const lease = owners.leases.get(owner)
-            if (lease?.generation !== generation) return false
-            owners.leases.delete(owner)
+            const attachment = owners.attachments.get(owner)
+            if (attachment?.generation !== generation) return false
+            owners.attachments.delete(owner)
             // Stop work before closing the helper or admitting a successor attachment.
-            yield* interrupt.pipe(Effect.ensuring(Scope.close(lease.scope, Exit.void)))
+            yield* stop.pipe(Effect.ensuring(Scope.close(attachment.scope, Exit.void)))
             return true
           }).pipe(Effect.uninterruptible),
         ),
       tool: (owner) => {
-        const lease = owners.leases.get(owner)
-        if (!lease?.live || lease.location !== location) return
+        const attachment = owners.attachments.get(owner)
+        const lease = attachment?.lease
+        if (!attachment || attachment.location !== location || !lease?.live) return
         return {
           name: toolName,
           options: { codemode: false },
@@ -174,7 +172,8 @@ const layer = Layer.effect(
                   name: "reply",
                   args,
                   sessionID: context.sessionID,
-                  canDispatch: () => context.sessionID === owner && lease.live && owners.leases.get(owner) === lease,
+                  canDispatch: () =>
+                    context.sessionID === owner && lease.live && owners.attachments.get(owner) === attachment,
                 })
                 .pipe(Effect.mapError(() => new Tool.Error({ message: "The Fabric reply lease is unavailable" })))
               const content = result.content.filter((part) => part.type === "text")

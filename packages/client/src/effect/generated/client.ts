@@ -101,10 +101,10 @@ import type {
   ExperimentalSessionActiveExecutionOutput,
   ExperimentalSessionActiveSteerInput,
   ExperimentalSessionActiveSteerOutput,
-  ExperimentalSessionAttachReplyLeaseInput,
-  ExperimentalSessionAttachReplyLeaseOutput,
-  ExperimentalSessionCloseReplyLeaseInput,
-  ExperimentalSessionCloseReplyLeaseOutput,
+  ExperimentalSessionAttachReplyRouteInput,
+  ExperimentalSessionAttachReplyRouteOutput,
+  ExperimentalSessionCloseReplyRouteInput,
+  ExperimentalSessionCloseReplyRouteOutput,
   ExperimentalSessionSkillInput,
   ExperimentalSessionSkillOutput,
   ExperimentalSessionWaitInput,
@@ -866,21 +866,22 @@ const EndpointExperimentalSessionActiveSteer =
       ),
     )
 
-const EndpointExperimentalSessionAttachReplyLease =
-  (raw: RawClient["server.session"]) => (input: ExperimentalSessionAttachReplyLeaseInput) =>
-    preserveEffect<ExperimentalSessionAttachReplyLeaseOutput>()(
-      raw["experimental.session.attachReplyLease"]({
+const EndpointExperimentalSessionAttachReplyRoute =
+  (raw: RawClient["server.session"]) => (input: ExperimentalSessionAttachReplyRouteInput) =>
+    preserveEffect<ExperimentalSessionAttachReplyRouteOutput>()(
+      raw["experimental.session.attachReplyRoute"]({
         params: { sessionID: input["sessionID"] },
         payload: { scope: input["scope"] },
       }).pipe(Effect.mapError(mapClientError)),
     )
 
-const EndpointExperimentalSessionCloseReplyLease =
-  (raw: RawClient["server.session"]) => (input: ExperimentalSessionCloseReplyLeaseInput) =>
-    preserveEffect<ExperimentalSessionCloseReplyLeaseOutput>()(
-      raw["experimental.session.closeReplyLease"]({
+const EndpointExperimentalSessionCloseReplyRoute =
+  (raw: RawClient["server.session"]) => (input: ExperimentalSessionCloseReplyRouteInput) =>
+    preserveEffect<ExperimentalSessionCloseReplyRouteOutput>()(
+      raw["experimental.session.closeReplyRoute"]({
         params: { sessionID: input["sessionID"] },
         query: { generation: input["generation"] },
+        payload: { pending: input["pending"] },
       }).pipe(Effect.mapError(mapClientError)),
     )
 
@@ -942,8 +943,8 @@ const adaptGroupExperimentalSession = (raw: RawClient["server.session"]) => ({
   export: EndpointExperimentalSessionExport(raw),
   activeExecution: EndpointExperimentalSessionActiveExecution(raw),
   activeSteer: EndpointExperimentalSessionActiveSteer(raw),
-  attachReplyLease: EndpointExperimentalSessionAttachReplyLease(raw),
-  closeReplyLease: EndpointExperimentalSessionCloseReplyLease(raw),
+  attachReplyRoute: EndpointExperimentalSessionAttachReplyRoute(raw),
+  closeReplyRoute: EndpointExperimentalSessionCloseReplyRoute(raw),
   skill: EndpointExperimentalSessionSkill(raw),
   wait: EndpointExperimentalSessionWait(raw),
   instructions: {

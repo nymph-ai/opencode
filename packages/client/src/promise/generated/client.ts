@@ -95,10 +95,10 @@ import type {
   ExperimentalSessionActiveExecutionOutput,
   ExperimentalSessionActiveSteerInput,
   ExperimentalSessionActiveSteerOutput,
-  ExperimentalSessionAttachReplyLeaseInput,
-  ExperimentalSessionAttachReplyLeaseOutput,
-  ExperimentalSessionCloseReplyLeaseInput,
-  ExperimentalSessionCloseReplyLeaseOutput,
+  ExperimentalSessionAttachReplyRouteInput,
+  ExperimentalSessionAttachReplyRouteOutput,
+  ExperimentalSessionCloseReplyRouteInput,
+  ExperimentalSessionCloseReplyRouteOutput,
   ExperimentalSessionSkillInput,
   ExperimentalSessionSkillOutput,
   ExperimentalSessionWaitInput,
@@ -1138,8 +1138,8 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
-        attachReplyLease: (input: ExperimentalSessionAttachReplyLeaseInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalSessionAttachReplyLeaseOutput>(
+        attachReplyRoute: (input: ExperimentalSessionAttachReplyRouteInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSessionAttachReplyRouteOutput>(
             {
               method: "PUT",
               path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/fabric-reply`,
@@ -1150,12 +1150,13 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
-        closeReplyLease: (input: ExperimentalSessionCloseReplyLeaseInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalSessionCloseReplyLeaseOutput>(
+        closeReplyRoute: (input: ExperimentalSessionCloseReplyRouteInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSessionCloseReplyRouteOutput>(
             {
               method: "DELETE",
               path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/fabric-reply`,
               query: { generation: input["generation"] },
+              body: { pending: input["pending"] },
               successStatus: 200,
               declaredStatuses: [400, 401, 404],
               empty: false,
