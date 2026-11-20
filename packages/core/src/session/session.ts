@@ -1,6 +1,6 @@
 export * as Session from "./session.js"
 
-import { DateTime, Effect, Fiber, Scope } from "effect"
+import { DateTime, Effect, Fiber, Option, Scope } from "effect"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
 import type { Permission } from "@opencode/schema/permission"
@@ -11,7 +11,14 @@ import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
 import { ShellResult } from "../shell/result.js"
 import type { Skill } from "../skill.js"
-import { BusyError, CompactionConflictError, InboxConflictError, NotFoundError, PromptConflictError } from "./error.js"
+import {
+  BusyError,
+  CompactionConflictError,
+  ExecutionChangedError,
+  InboxConflictError,
+  NotFoundError,
+  PromptConflictError,
+} from "./error.js"
 import { SessionEvent } from "./event.js"
 import { SessionExecution } from "./execution.js"
 import { SessionInbox } from "./inbox.js"
@@ -186,6 +193,52 @@ export const make = Effect.fn("Session.make")(function* () {
         }),
       ),
   )
+  const activeExecution = Effect.fn("Session.activeExecution")(function* (sessionID: SessionSchema.ID) {
+    yield* get(sessionID)
+    return yield* execution.activeSteering?.executionID(sessionID) ?? Effect.succeed(undefined)
+  })
+  const steerActive = Effect.fn("Session.steerActive")(
+    (
+      sessionID: SessionSchema.ID,
+      input: { id: SessionMessage.ID; expected: string; text: string; metadata?: Record<string, unknown> },
+    ) =>
+      Effect.gen(function* () {
+        const session = yield* get(sessionID)
+        const request = { id: input.id, sessionID }
+        const existing = yield* admission.activeSteerReceipt(request)
+        if (existing) return existing
+        const steering = execution.activeSteering
+        const conflict = new ExecutionChangedError({ sessionID, expected: input.expected })
+        if (!steering || session.revert || (yield* steering.executionID(sessionID)) !== input.expected)
+          return yield* conflict
+        const item = yield* SessionPrompt.prepare({
+          session,
+          messageID: input.id,
+          input: { text: input.text, metadata: input.metadata, delivery: "steer" },
+        }).pipe(
+          instances.provide(session),
+          Effect.provideService(Database.Service, database),
+          Effect.provideService(FSUtil.Service, fs),
+        )
+        if (item.delivery !== "steer") return yield* conflict
+        const accepted = yield* steering.stage(
+          sessionID,
+          input.expected,
+          admission.deliverActiveSteer({ ...request, executionId: input.expected, item }),
+        )
+        if (Option.isNone(accepted)) {
+          const receipt = yield* admission.activeSteerReceipt(request)
+          if (receipt) return receipt
+          return yield* conflict
+        }
+        return accepted.value
+      }).pipe(
+        Effect.catchTag(
+          "SessionInbox.LifecycleConflict",
+          () => new PromptConflictError({ sessionID, messageID: input.id }),
+        ),
+      ),
+  )
   const shell = Effect.fn("Session.shell")(function* (
     sessionID: SessionSchema.ID,
     input: { id?: SessionMessage.ID; command: string },
@@ -327,6 +380,8 @@ export const make = Effect.fn("Session.make")(function* () {
     switchModel,
     inbox,
     prompt,
+    activeExecution,
+    steerActive,
     synthetic,
     shell,
     skill,
@@ -353,6 +408,8 @@ export const make = Effect.fn("Session.make")(function* () {
     const switchModel = operations.switchModel.bind(undefined, sessionID)
     const inbox = operations.inbox.bind(undefined, sessionID)
     const prompt = operations.prompt.bind(undefined, sessionID)
+    const activeExecution = operations.activeExecution.bind(undefined, sessionID)
+    const steerActive = operations.steerActive.bind(undefined, sessionID)
     const synthetic = operations.synthetic.bind(undefined, sessionID)
     const shell = operations.shell.bind(undefined, sessionID)
     const skill = operations.skill.bind(undefined, sessionID)
@@ -382,6 +439,8 @@ export const make = Effect.fn("Session.make")(function* () {
       switchModel,
       inbox,
       prompt,
+      activeExecution,
+      steerActive,
       synthetic,
       shell,
       skill,

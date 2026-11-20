@@ -339,6 +339,41 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       ),
     )
     .add(
+      HttpApiEndpoint.get("experimental.session.activeExecution", "/api/experimental/session/:sessionID/active-steer", {
+        params: { sessionID: Session.ID },
+        success: Schema.Struct({ data: Schema.Struct({ executionId: Schema.String.pipe(Schema.optional) }) }),
+        error: [SessionNotFoundError],
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.session.activeExecution",
+          summary: "Read the steerable execution",
+          description: "Returns the identity of the draining execution if it can accept active steering.",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("experimental.session.activeSteer", "/api/experimental/session/:sessionID/active-steer", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({
+          id: SessionMessage.ID,
+          expectedExecutionId: Schema.String,
+          text: Schema.String,
+          metadata: SessionInbox.UserPayload.fields.metadata,
+        }),
+        success: Schema.Struct({ data: SessionInbox.User }),
+        error: [ConflictError, InvalidRequestError, SessionNotFoundError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.session.activeSteer",
+            summary: "Insert text into the expected active execution",
+            description:
+              "Waits for durable insertion into the named running execution or returns a conflict. Retrying a retained ID returns its existing insertion without waking the session.",
+          }),
+        ),
+    )
+    .add(
       HttpApiEndpoint.post("session.prompt", "/api/session/:sessionID/prompt", {
         params: { sessionID: Session.ID },
         payload: Schema.Struct({

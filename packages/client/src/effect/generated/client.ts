@@ -97,6 +97,10 @@ import type {
   ExperimentalSessionImportOutput,
   ExperimentalSessionExportInput,
   ExperimentalSessionExportOutput,
+  ExperimentalSessionActiveExecutionInput,
+  ExperimentalSessionActiveExecutionOutput,
+  ExperimentalSessionActiveSteerInput,
+  ExperimentalSessionActiveSteerOutput,
   ExperimentalSessionSkillInput,
   ExperimentalSessionSkillOutput,
   ExperimentalSessionWaitInput,
@@ -832,6 +836,32 @@ const EndpointExperimentalSessionExport =
       ),
     )
 
+const EndpointExperimentalSessionActiveExecution =
+  (raw: RawClient["server.session"]) => (input: ExperimentalSessionActiveExecutionInput) =>
+    preserveEffect<ExperimentalSessionActiveExecutionOutput>()(
+      raw["experimental.session.activeExecution"]({ params: { sessionID: input["sessionID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalSessionActiveSteer =
+  (raw: RawClient["server.session"]) => (input: ExperimentalSessionActiveSteerInput) =>
+    preserveEffect<ExperimentalSessionActiveSteerOutput>()(
+      raw["experimental.session.activeSteer"]({
+        params: { sessionID: input["sessionID"] },
+        payload: {
+          id: input["id"],
+          expectedExecutionId: input["expectedExecutionId"],
+          text: input["text"],
+          metadata: input["metadata"],
+        },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
 const EndpointExperimentalSessionSkill = (raw: RawClient["server.session"]) => (input: ExperimentalSessionSkillInput) =>
   preserveEffect<ExperimentalSessionSkillOutput>()(
     raw["session.skill"]({
@@ -888,6 +918,8 @@ const adaptGroupExperimentalSession = (raw: RawClient["server.session"]) => ({
   stats: EndpointExperimentalSessionStats(raw),
   import: EndpointExperimentalSessionImport(raw),
   export: EndpointExperimentalSessionExport(raw),
+  activeExecution: EndpointExperimentalSessionActiveExecution(raw),
+  activeSteer: EndpointExperimentalSessionActiveSteer(raw),
   skill: EndpointExperimentalSessionSkill(raw),
   wait: EndpointExperimentalSessionWait(raw),
   instructions: {

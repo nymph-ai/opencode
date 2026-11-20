@@ -214,6 +214,10 @@ export interface Interface {
     /** A bounded durability step after successful admission and wake, in the same interruption mask. */
     onAccepted?: Effect.Effect<void>,
   ) => ReturnType<Session.Handle["prompt"]>
+  readonly activeExecution: (sessionID: SessionSchema.ID) => ReturnType<Session.Handle["activeExecution"]>
+  readonly steerActive: (
+    input: Parameters<Session.Handle["steerActive"]>[0] & { sessionID: SessionSchema.ID },
+  ) => ReturnType<Session.Handle["steerActive"]>
   /** Generates text from current Session context without admitting input or mutating history. Its usage counts toward the Session's totals. */
   readonly generate: (input: {
     sessionID: SessionSchema.ID
@@ -495,6 +499,8 @@ const layer = Layer.effect(
           ),
         ),
       prompt: (input, onAccepted) => sessions.forSession(input.sessionID).prompt(input, onAccepted),
+      activeExecution: (sessionID) => sessions.forSession(sessionID).activeExecution(),
+      steerActive: (input) => sessions.forSession(input.sessionID).steerActive(input),
       generate: Effect.fn("Session.generate")(function* (input) {
         const session = yield* result.get(input.sessionID)
         return yield* SessionGenerate.generate({ session, prompt: input.prompt }).pipe(

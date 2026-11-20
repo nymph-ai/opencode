@@ -1312,7 +1312,7 @@ export type SessionInboxDelivered = {
   type: "session.inbox.delivered"
   durable: { aggregateID: string; seq: EventSeq; version: 1 }
   location?: LocationRef
-  data: { sessionID: SessionID; inboxID: SessionMessageID }
+  data: { sessionID: SessionID; inboxID: SessionMessageID; executionId?: string }
 }
 
 export type SessionInboxMovePayload1 = { location: LocationRef; projectID: ProjectID; subpath?: RelativePath }
@@ -3962,6 +3962,20 @@ export type ExperimentalSessionImportOutput = { data: SessionInfo }["data"]
 export type ExperimentalSessionExportInput = { readonly sessionID: string; readonly sanitize?: boolean | undefined }
 
 export type ExperimentalSessionExportOutput = { data: SessionTransferData }["data"]
+
+export type ExperimentalSessionActiveExecutionInput = { readonly sessionID: string }
+
+export type ExperimentalSessionActiveExecutionOutput = { data: { executionId?: string | undefined } }["data"]
+
+export type ExperimentalSessionActiveSteerInput = {
+  readonly sessionID: string
+  readonly id: string
+  readonly expectedExecutionId: string
+  readonly text: string
+  readonly metadata?: { readonly [x: string]: JsonValue } | undefined
+}
+
+export type ExperimentalSessionActiveSteerOutput = { data: SessionInboxUser }["data"]
 
 export type ExperimentalSessionSkillInput = {
   readonly sessionID: string

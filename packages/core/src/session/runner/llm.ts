@@ -68,7 +68,7 @@ const layer = Layer.effect(
       let entering = true
       let stepped = input.stepped ?? false
       const promotable = input.promotable ?? "input"
-      if (!force && !continuing && !stepped) {
+      if (!force && !continuing && !stepped && !input.boundary?.hasStaged()) {
         const pending = yield* SessionInbox.nextPromotable(db, sessionID, "input")
         if (!pending) return DrainResult.Complete()
         const control = pending.type === "compaction" || pending.type === "move"
@@ -174,7 +174,9 @@ const layer = Layer.effect(
                 force = false
                 continue
               }
-              if (!force && !continuing && (!pending || (pending.delivery === "queue" && promotable === "steer"))) {
+              const onlyStaged =
+                !force && !continuing && (!pending || (pending.delivery === "queue" && promotable === "steer"))
+              if (onlyStaged && !input.boundary?.hasStaged()) {
                 // Control-only drains such as a manual compaction never ran the model, so they skip the hook.
                 if (pending || !stepped) return DrainResult.Complete()
                 // The Session would go idle; a plugin may admit input to keep this execution working.
@@ -199,11 +201,17 @@ const layer = Layer.effect(
                   )
                   // A control admitted during context preparation owns this boundary.
                   if (promoted === undefined) return undefined
-                  if (promoted > 0 && !selected.session.parentID && SessionTitle.isUntitled(selected.session))
+                  const inserted = yield* input.boundary?.flush ?? Effect.succeed(false)
+                  if (onlyStaged && promoted === 0 && !inserted) return DrainResult.Complete()
+                  if (
+                    (promoted > 0 || inserted) &&
+                    !selected.session.parentID &&
+                    SessionTitle.isUntitled(selected.session)
+                  )
                     yield* FiberMap.run(titles, sessionID, title.generate(sessionID), {
                       onlyIfMissing: true,
                     })
-                  if (promoted > 0) step = 1
+                  if (promoted > 0 || inserted) step = 1
                   return { _tag: "Ready" as const, context: yield* context.load(selected) }
                 }),
               )

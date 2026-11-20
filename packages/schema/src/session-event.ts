@@ -213,7 +213,7 @@ const InboxRef = {
 export const InboxDelivered = Event.durable({
   type: "session.inbox.delivered",
   ...options,
-  schema: InboxRef,
+  schema: { ...InboxRef, executionId: Schema.String.pipe(optional) },
 })
 export type InboxDelivered = typeof InboxDelivered.Type
 

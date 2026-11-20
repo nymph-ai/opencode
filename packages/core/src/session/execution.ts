@@ -22,6 +22,10 @@ export interface Interface {
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   /** Checks process-local ownership, including interruption cleanup and terminal settlement. */
   readonly isActive: (sessionID: SessionSchema.ID) => Effect.Effect<boolean>
+  readonly activeSteering?: Pick<
+    SessionRunCoordinator.Coordinator<SessionSchema.ID, SessionRunner.RunError>,
+    "executionID" | "stage"
+  >
   /** Starts execution while idle or joins the active execution. */
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, SessionRunner.RunError>
   /** Registers newly recorded work. Repeated wakeups may coalesce. */
@@ -105,6 +109,7 @@ export const layer = Layer.effect(
     const drain = Effect.fnUntraced(function* (
       sessionID: SessionSchema.ID,
       force: boolean,
+      boundary: SessionRunCoordinator.DrainBoundary,
       continuation?: SessionRunner.Continuation,
       promotable: SessionInbox.Promotable = "input",
       stepped = false,
@@ -118,6 +123,7 @@ export const layer = Layer.effect(
           continuation,
           promotable,
           stepped,
+          boundary,
           interruption: () => interruption(sessionID),
         }),
       ).pipe(
@@ -131,8 +137,8 @@ export const layer = Layer.effect(
       )
       return yield* SessionRunner.DrainResult.$match(result, {
         Complete: () => Effect.void,
-        Moved: (result) => drain(sessionID, false, result.continuation, promotable, result.stepped),
-        Reloaded: (result) => drain(sessionID, result.force, result.continuation, promotable, result.stepped),
+        Moved: (result) => drain(sessionID, false, boundary, result.continuation, promotable, result.stepped),
+        Reloaded: (result) => drain(sessionID, result.force, boundary, result.continuation, promotable, result.stepped),
       })
     })
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
@@ -151,7 +157,7 @@ export const layer = Layer.effect(
             })
           }),
         ),
-      drain: (sessionID, force, promotable) => drain(sessionID, force, undefined, promotable),
+      drain: (sessionID, force, promotable, boundary) => drain(sessionID, force, boundary, undefined, promotable),
       // One terminal observation per busy period, covering every coalesced drain.
       settled: (sessionID, exit, reason) =>
         reportLifecycle(
@@ -182,6 +188,7 @@ export const layer = Layer.effect(
     return Service.of({
       active: coordinator.active,
       isActive: coordinator.isActive,
+      activeSteering: coordinator,
       interrupt: (sessionID, options) =>
         Effect.gen(function* () {
           const interrupted = yield* coordinator.interrupt(sessionID, "user")

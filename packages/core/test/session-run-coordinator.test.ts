@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option } from "effect"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionRunCoordinator } from "@opencode/core/session/run-coordinator"
 import { testEffect } from "./lib/effect"
@@ -7,6 +7,80 @@ import { testEffect } from "./lib/effect"
 const it = testEffect(Layer.empty)
 
 describe("SessionRunCoordinator", () => {
+  it.effect("drains staged input in its own execution without waking a successor", () =>
+    Effect.gen(function* () {
+      const running = yield* Deferred.make<void>()
+      const finishing = yield* Deferred.make<void>()
+      const settling = yield* Deferred.make<void>()
+      const settled = yield* Deferred.make<void>()
+      let runs = 0
+      let starts = 0
+      let actions = 0
+      const coordinator = yield* SessionRunCoordinator.make<string, never>({
+        started: () => Effect.sync(() => void starts++),
+        drain: Effect.fnUntraced(function* (_key, _force, scope, boundary) {
+          if (runs++ === 0) {
+            yield* Deferred.succeed(running, undefined)
+            yield* Deferred.await(finishing)
+            return
+          }
+          expect(scope).toBe("steer")
+          expect(boundary.hasStaged()).toBe(true)
+          expect(yield* boundary.flush).toBe(true)
+        }),
+        settled: () => Deferred.succeed(settling, undefined).pipe(Effect.andThen(Deferred.await(settled))),
+      })
+      const operation = Effect.sync(() => ({ value: ++actions, changed: true }))
+      expect(yield* coordinator.stage("session", "idle", operation)).toEqual(Option.none())
+      yield* coordinator.wake("session")
+      yield* Deferred.await(running)
+      const id = (yield* coordinator.executionID("session"))!
+      expect(id).toBeDefined()
+      const staged = yield* coordinator
+        .stage("session", id, operation)
+        .pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Deferred.succeed(finishing, undefined)
+      expect(yield* Fiber.join(staged)).toEqual(Option.some(1))
+      yield* Deferred.await(settling)
+      expect(yield* coordinator.executionID("session")).toBeUndefined()
+      expect(yield* coordinator.stage("session", id, operation)).toEqual(Option.none())
+      yield* Deferred.succeed(settled, undefined)
+      yield* coordinator.awaitIdle("session")
+      expect({ runs, starts, actions }).toEqual({ runs: 2, starts: 1, actions: 1 })
+    }),
+  )
+
+  it.effect("discards staged input when the owning execution is interrupted", () =>
+    Effect.gen(function* () {
+      const running = yield* Deferred.make<void>()
+      const successor = yield* Deferred.make<void>()
+      let runs = 0
+      let actions = 0
+      const coordinator = yield* SessionRunCoordinator.make<string, never>({
+        drain: () =>
+          Effect.suspend(() =>
+            Deferred.succeed(runs++ === 0 ? running : successor, undefined).pipe(Effect.andThen(Effect.never)),
+          ),
+      })
+      yield* coordinator.wake("session")
+      yield* Deferred.await(running)
+      const id = (yield* coordinator.executionID("session"))!
+      const operation = Effect.sync(() => ({ value: ++actions, changed: true }))
+      const staged = yield* coordinator
+        .stage("session", id, operation)
+        .pipe(Effect.forkChild({ startImmediately: true }))
+      expect(yield* coordinator.interrupt("session")).toBe(true)
+      expect(yield* Fiber.join(staged)).toEqual(Option.none())
+      yield* coordinator.awaitIdle("session")
+      expect(runs).toBe(1)
+      yield* coordinator.wake("session")
+      yield* Deferred.await(successor)
+      expect(yield* coordinator.executionID("session")).not.toBe(id)
+      expect(yield* coordinator.stage("session", id, operation)).toEqual(Option.none())
+      expect(actions).toBe(0)
+    }),
+  )
+
   it.effect("joins concurrent resumes for one key", () =>
     Effect.gen(function* () {
       const gate = yield* Deferred.make<void>()

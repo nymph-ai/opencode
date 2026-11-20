@@ -287,6 +287,49 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "experimental.session.activeExecution",
+        Effect.fn(function* (ctx) {
+          const executionId = yield* session
+            .activeExecution(ctx.params.sessionID)
+            .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          return { data: { executionId } }
+        }),
+      )
+      .handle(
+        "experimental.session.activeSteer",
+        Effect.fn(function* (ctx) {
+          const data = yield* session
+            .steerActive({
+              sessionID: ctx.params.sessionID,
+              id: ctx.payload.id,
+              text: ctx.payload.text,
+              expected: ctx.payload.expectedExecutionId,
+              metadata: ctx.payload.metadata,
+            })
+            .pipe(
+              Effect.catchTags({
+                "Session.NotFoundError": missingSession,
+                "Session.ExecutionChangedError": (error) =>
+                  new ConflictError({
+                    message: "The expected execution cannot accept steering",
+                    resource: error.expected,
+                  }),
+                "Session.PromptConflictError": (error) =>
+                  new ConflictError({
+                    message: "The message ID belongs to a different durable insertion",
+                    resource: error.messageID,
+                  }),
+                "Session.AttachmentError": (error) =>
+                  new InvalidRequestError({ message: error.message, field: "files" }),
+                "Session.SkillNotFoundError": (error) =>
+                  new InvalidRequestError({ message: `Skill not found: ${error.skill}`, field: "skills" }),
+              }),
+              locationErrors,
+            )
+          return { data }
+        }),
+      )
+      .handle(
         "session.prompt",
         Effect.fn(function* (ctx) {
           return {

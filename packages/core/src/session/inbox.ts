@@ -27,7 +27,7 @@ import { SessionBlob } from "./blob.js"
 import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStored } from "./stored.js"
-import { SessionInboxTable, SessionMessageTable } from "./sql.js"
+import { SessionInboxTable, SessionMessageTable, SessionSteerReceiptTable } from "./sql.js"
 import { SessionHistory } from "./history.js"
 
 type DatabaseService = Database.Interface["db"]
@@ -223,6 +223,60 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     return admitted
   })
 
+  // A remote client may retry after the process that owned the execution has
+  // gone. Only our atomic delivery record and its retained message prove it.
+  const activeSteerReceipt = Effect.fn("SessionInbox.activeSteerReceipt")(function* (request: PendingRef) {
+    const receipt = yield* db
+      .select({ sessionID: SessionSteerReceiptTable.session_id })
+      .from(SessionSteerReceiptTable)
+      .where(eq(SessionSteerReceiptTable.id, request.id))
+      .get()
+      .pipe(Effect.orDie)
+    if (!receipt) return undefined
+    if (receipt.sessionID !== request.sessionID) return yield* new LifecycleConflict({ id: request.id })
+    const message = yield* promotedFromMessage(db, request.sessionID, request.id, "steer")
+    if (message?.type !== "user") return yield* new LifecycleConflict({ id: request.id })
+    return message
+  })
+
+  const deliverActiveSteer = Effect.fn("SessionInbox.deliverActiveSteer")(
+    (
+      request: PendingRef & {
+        readonly executionId: string
+        readonly item: Extract<Item, { readonly type: "user" }>
+      },
+    ) =>
+      serialized(
+        request.sessionID,
+        Effect.gen(function* () {
+          const existing = yield* activeSteerReceipt(request)
+          if (existing) return { value: existing, changed: false }
+          const [admitted] = yield* bus
+            .publishAll([
+              [SessionEvent.InboxEnqueued, { inboxID: request.id, sessionID: request.sessionID, item: request.item }],
+              [
+                SessionEvent.InboxDelivered,
+                { inboxID: request.id, sessionID: request.sessionID, executionId: request.executionId },
+              ],
+            ])
+            .pipe(
+              Effect.catchDefect((defect) =>
+                defect instanceof LifecycleConflict ? Effect.fail(defect) : Effect.die(defect),
+              ),
+            )
+          return {
+            value: User.make({
+              id: request.id,
+              sessionID: request.sessionID,
+              time: { created: DateTime.makeUnsafe(admitted.created) },
+              ...request.item,
+            }),
+            changed: true,
+          }
+        }),
+      ),
+  )
+
   const admitCompaction = Effect.fn("SessionInbox.admitCompaction")(function* (input: {
     readonly id: SessionMessage.ID
     readonly sessionID: SessionSchema.ID
@@ -285,6 +339,8 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     list: (sessionID: SessionSchema.ID) => list(db, sessionID),
     reconcile,
     admit,
+    activeSteerReceipt,
+    deliverActiveSteer,
     admitCompaction,
     cancel,
     steer,
@@ -313,6 +369,13 @@ export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(functio
     .get()
     .pipe(Effect.orDie)
   if (message !== undefined) return yield* Effect.die(new LifecycleConflict({ id: request.id }))
+  const priorSteer = yield* db
+    .select({ id: SessionSteerReceiptTable.id })
+    .from(SessionSteerReceiptTable)
+    .where(eq(SessionSteerReceiptTable.id, request.id))
+    .get()
+    .pipe(Effect.orDie)
+  if (priorSteer !== undefined) return yield* Effect.die(new LifecycleConflict({ id: request.id }))
   const payload =
     request.item.type === "user"
       ? encodeStoredUser(yield* SessionBlob.externalizePayload(db, request.item.payload))

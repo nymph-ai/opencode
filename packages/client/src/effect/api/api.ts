@@ -571,6 +571,24 @@ export type ExperimentalSessionExportOperation<E = never> = (
   input: ExperimentalSessionExportInput,
 ) => Effect.Effect<ExperimentalSessionExportOutput, E>
 
+export type ExperimentalSessionActiveExecutionInput = { readonly sessionID: Session.ID }
+export type ExperimentalSessionActiveExecutionOutput = { readonly executionId?: string | undefined }
+export type ExperimentalSessionActiveExecutionOperation<E = never> = (
+  input: ExperimentalSessionActiveExecutionInput,
+) => Effect.Effect<ExperimentalSessionActiveExecutionOutput, E>
+
+export type ExperimentalSessionActiveSteerInput = {
+  readonly sessionID: Session.ID
+  readonly id: SessionMessage.ID
+  readonly expectedExecutionId: string
+  readonly text: string
+  readonly metadata?: { readonly [x: string]: unknown } | undefined
+}
+export type ExperimentalSessionActiveSteerOutput = SessionInbox.User
+export type ExperimentalSessionActiveSteerOperation<E = never> = (
+  input: ExperimentalSessionActiveSteerInput,
+) => Effect.Effect<ExperimentalSessionActiveSteerOutput, E>
+
 export type ExperimentalSessionSkillInput = {
   readonly sessionID: Session.ID
   readonly id: Skill.ID
@@ -792,7 +810,11 @@ export type ExperimentalSessionLogOutput =
           readonly location?:
             | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
             | undefined
-          readonly data: { readonly sessionID: Session.ID; readonly inboxID: SessionMessage.ID }
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly inboxID: SessionMessage.ID
+            readonly executionId?: string | undefined
+          }
         }
       | {
           readonly id: Event.ID
@@ -1444,6 +1466,8 @@ export interface ExperimentalSessionApi<E = never> {
   readonly stats: ExperimentalSessionStatsOperation<E>
   readonly import: ExperimentalSessionImportOperation<E>
   readonly export: ExperimentalSessionExportOperation<E>
+  readonly activeExecution: ExperimentalSessionActiveExecutionOperation<E>
+  readonly activeSteer: ExperimentalSessionActiveSteerOperation<E>
   readonly skill: ExperimentalSessionSkillOperation<E>
   readonly wait: ExperimentalSessionWaitOperation<E>
   readonly instructions: {

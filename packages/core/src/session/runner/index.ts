@@ -1,5 +1,7 @@
 export * as SessionRunner from "./index.js"
 
+import type { SessionRunCoordinator } from "../run-coordinator.js"
+
 import type { FileSystem } from "../../filesystem.js"
 import type { AIError } from "@opencode/ai/effect"
 import { Context, Data, Effect } from "effect"
@@ -38,6 +40,8 @@ export interface Interface {
     readonly promotable?: Promotable
     /** The previous drain ran a step before handing off, so reaching idle still runs the idle hook. */
     readonly stepped?: boolean
+    /** Operations that may be committed only at a step of their owning execution. */
+    readonly boundary?: SessionRunCoordinator.DrainBoundary
     /** Why the execution is being interrupted, once it is: `"user"` when someone stopped it. */
     readonly interruption?: () => "user" | "shutdown" | undefined
   }) => Effect.Effect<DrainResult, RunError>

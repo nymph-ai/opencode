@@ -151,6 +151,19 @@ export const SessionInboxTable = sqliteTable(
   ],
 )
 
+export const SessionSteerReceiptTable = sqliteTable(
+  "session_steer_receipt",
+  {
+    id: text().$type<SessionMessage.ID>().primaryKey(),
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    execution_id: text().notNull(),
+  },
+  (table) => [index("session_steer_receipt_session_idx").on(table.session_id)],
+)
+
 export const InstructionEntryTable = sqliteTable(
   "instruction_entry",
   {

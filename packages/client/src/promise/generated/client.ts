@@ -91,6 +91,10 @@ import type {
   ExperimentalSessionImportOutput,
   ExperimentalSessionExportInput,
   ExperimentalSessionExportOutput,
+  ExperimentalSessionActiveExecutionInput,
+  ExperimentalSessionActiveExecutionOutput,
+  ExperimentalSessionActiveSteerInput,
+  ExperimentalSessionActiveSteerOutput,
   ExperimentalSessionSkillInput,
   ExperimentalSessionSkillOutput,
   ExperimentalSessionWaitInput,
@@ -1098,6 +1102,34 @@ export function make(options: ClientOptions) {
               query: { sanitize: input["sanitize"] },
               successStatus: 200,
               declaredStatuses: [400, 401, 404, 500],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        activeExecution: (input: ExperimentalSessionActiveExecutionInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalSessionActiveExecutionOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/active-steer`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        activeSteer: (input: ExperimentalSessionActiveSteerInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalSessionActiveSteerOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/active-steer`,
+              body: {
+                id: input["id"],
+                expectedExecutionId: input["expectedExecutionId"],
+                text: input["text"],
+                metadata: input["metadata"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 409],
               empty: false,
             },
             requestOptions,

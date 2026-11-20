@@ -16,7 +16,14 @@ import { SessionMessageUpdater } from "./message-updater.js"
 import { SessionInbox } from "./inbox.js"
 import { InstructionState } from "./instruction-state.js"
 import { SessionBlob } from "./blob.js"
-import { SessionInboxTable, SessionMessageTable, SessionPartTable, SessionTable, type SessionPartData } from "./sql.js"
+import {
+  SessionInboxTable,
+  SessionMessageTable,
+  SessionPartTable,
+  SessionSteerReceiptTable,
+  SessionTable,
+  type SessionPartData,
+} from "./sql.js"
 import { SessionStored } from "./stored.js"
 import { InstructionEntry } from "./instruction-entry.js"
 import type { SQLiteUpdateSetSource } from "drizzle-orm/sqlite-core/query-builders/update"
@@ -1012,6 +1019,14 @@ const layer = Layer.effectDiscard(
           sessionID: event.data.sessionID,
         })
         const time = { created: DateTime.makeUnsafe(event.created) }
+        if (event.data.executionId !== undefined) {
+          if (input.type !== "user") return yield* Effect.die(new SessionInbox.LifecycleConflict({ id: input.id }))
+          yield* db
+            .insert(SessionSteerReceiptTable)
+            .values({ id: input.id, session_id: event.data.sessionID, execution_id: event.data.executionId })
+            .run()
+            .pipe(Effect.orDie)
+        }
         if (input.type === "user")
           yield* insertMessage(db, event, {
             id: input.id,

@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "ab8fea18-0d95-48a1-b631-c112235dc492",
-  "prevIds": ["0709c7fb-3e7c-4bec-a6c5-0dd42ae64919"],
+  "id": "b960e3ec-320a-4656-b084-a94853491c70",
+  "prevIds": ["ab8fea18-0d95-48a1-b631-c112235dc492"],
   "ddl": [
     {
       "name": "account_state",
@@ -82,6 +82,10 @@
     },
     {
       "name": "session_part",
+      "entityType": "tables"
+    },
+    {
+      "name": "session_steer_receipt",
       "entityType": "tables"
     },
     {
@@ -1564,6 +1568,36 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
+      "table": "session_steer_receipt"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "session_steer_receipt"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "execution_id",
+      "entityType": "columns",
+      "table": "session_steer_receipt"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
       "table": "session_v2"
     },
     {
@@ -2149,6 +2183,17 @@
       "table": "session_part"
     },
     {
+      "columns": ["session_id"],
+      "tableTo": "session_v2",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_session_steer_receipt_session_id_session_v2_id_fk",
+      "entityType": "fks",
+      "table": "session_steer_receipt"
+    },
+    {
       "columns": ["project_id"],
       "tableTo": "project",
       "columnsTo": ["id"],
@@ -2315,6 +2360,13 @@
       "nameExplicit": false,
       "name": "session_message_pk",
       "table": "session_message",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "session_steer_receipt_pk",
+      "table": "session_steer_receipt",
       "entityType": "pks"
     },
     {
@@ -2646,6 +2698,20 @@
       "name": "session_part_session_message_idx",
       "entityType": "indexes",
       "table": "session_part"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_steer_receipt_session_idx",
+      "entityType": "indexes",
+      "table": "session_steer_receipt"
     },
     {
       "columns": [

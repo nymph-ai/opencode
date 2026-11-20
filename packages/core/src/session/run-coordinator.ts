@@ -1,6 +1,6 @@
 export * as SessionRunCoordinator from "./run-coordinator.js"
 
-import { Deferred, Effect, Exit, Fiber, FiberSet, Scope } from "effect"
+import { Deferred, Effect, Exit, Fiber, FiberSet, Option, Scope } from "effect"
 import type { Promotable } from "./inbox.js"
 
 /** Serializes execution for each key while allowing different keys to run concurrently. */
@@ -9,6 +9,17 @@ export interface Coordinator<Key, E, Reason = never> {
   readonly active: Effect.Effect<ReadonlySet<Key>>
   /** Snapshots keys genuinely draining: owned and not stopping. Settlement windows are excluded. */
   readonly draining: Effect.Effect<ReadonlySet<Key>>
+  /** Identifies the exact draining execution. Changes on a successor or process restart. */
+  readonly executionID: (key: Key) => Effect.Effect<string | undefined>
+  /**
+   * Stages an operation for this execution's own drain boundary. Idle, stopping,
+   * mismatched and already-settling executions refuse it without running it.
+   */
+  readonly stage: <A, Failure>(
+    key: Key,
+    expected: string,
+    operation: Effect.Effect<StagedResult<A>, Failure>,
+  ) => Effect.Effect<Option.Option<A>, Failure>
   /** Checks ownership for one key, including cleanup and terminal settlement. */
   readonly isActive: (key: Key) => Effect.Effect<boolean>
   /** Starts an execution while idle, or joins the active execution and returns its exit. */
@@ -37,13 +48,23 @@ export interface Coordinator<Key, E, Reason = never> {
  * with this execution's exit.
  */
 type Execution<E, Reason> = {
+  readonly id: string
   readonly done: Deferred.Deferred<void, E>
+  readonly staged: Array<{ run: Effect.Effect<boolean>; refuse: () => void }>
   owner?: Fiber.Fiber<void>
   scope: Promotable
   pendingWake?: Promotable
+  open: boolean
   stopping: boolean
   interruptionReason?: Reason
 }
+
+export interface DrainBoundary {
+  readonly hasStaged: () => boolean
+  readonly flush: Effect.Effect<boolean>
+}
+
+export type StagedResult<A> = { readonly value: A; readonly changed: boolean }
 
 /**
  * ```text
@@ -57,7 +78,7 @@ type Execution<E, Reason> = {
  * ```
  */
 export const make = <Key, E, Reason = never>(options: {
-  readonly drain: (key: Key, force: boolean, scope: Promotable) => Effect.Effect<void, E>
+  readonly drain: (key: Key, force: boolean, scope: Promotable, boundary: DrainBoundary) => Effect.Effect<void, E>
   /** Runs once when a process-local busy period begins, before its first drain. */
   readonly started?: (key: Key) => Effect.Effect<void>
   /**
@@ -70,12 +91,36 @@ export const make = <Key, E, Reason = never>(options: {
     const executions = new Map<Key, Execution<E, Reason>>()
     const fork = yield* FiberSet.makeRuntime<never, void, never>()
 
+    const boundary = (execution: Execution<E, Reason>): DrainBoundary => ({
+      hasStaged: () => execution.staged.length !== 0,
+      flush: Effect.uninterruptible(
+        Effect.suspend(() => {
+          if (!execution.open || execution.stopping) return Effect.succeed(false)
+          const staged = execution.staged.splice(0)
+          return Effect.forEach(staged, (operation) =>
+            Effect.suspend(() =>
+              execution.stopping
+                ? Effect.sync(() => {
+                    operation.refuse()
+                    return false
+                  })
+                : operation.run,
+            ),
+          ).pipe(Effect.map((results) => results.some(Boolean)))
+        }),
+      ),
+    })
+
     const loop = (key: Key, execution: Execution<E, Reason>, force: boolean): Effect.Effect<void, E> =>
-      Effect.suspend(() => options.drain(key, force, execution.scope)).pipe(
+      Effect.suspend(() => options.drain(key, force, execution.scope, boundary(execution))).pipe(
         Effect.andThen(
           Effect.suspend(() => {
-            if (execution.stopping || execution.pendingWake === undefined) return Effect.void
-            execution.scope = execution.pendingWake
+            if (execution.stopping) return Effect.void
+            if (execution.pendingWake === undefined && execution.staged.length === 0) {
+              execution.open = false
+              return Effect.void
+            }
+            execution.scope = execution.pendingWake ?? "steer"
             execution.pendingWake = undefined
             // Trampoline so drains that complete synchronously cannot grow the stack.
             return Effect.yieldNow.pipe(Effect.andThen(loop(key, execution, false)))
@@ -85,8 +130,11 @@ export const make = <Key, E, Reason = never>(options: {
 
     const start = (key: Key, force: boolean, scope: Promotable) => {
       const execution: Execution<E, Reason> = {
+        id: crypto.randomUUID(),
         done: Deferred.makeUnsafe<void, E>(),
+        staged: [],
         scope,
+        open: false,
         stopping: false,
       }
       executions.set(key, execution)
@@ -96,10 +144,17 @@ export const make = <Key, E, Reason = never>(options: {
       execution.owner = fork(
         Effect.yieldNow.pipe(
           Effect.andThen(Effect.uninterruptible(options.started?.(key) ?? Effect.void)),
+          Effect.andThen(
+            Effect.sync(() => {
+              execution.open = true
+            }),
+          ),
           Effect.andThen(loop(key, execution, force)),
           Effect.onExit((exit) =>
             Effect.sync(() => {
+              execution.open = false
               execution.owner = undefined
+              execution.staged.splice(0).forEach((operation) => operation.refuse())
             }).pipe(Effect.andThen(options.settled?.(key, exit, execution.interruptionReason) ?? Effect.void)),
           ),
           Effect.onExit((exit) => Effect.sync(() => settle(key, execution, exit))),
@@ -119,6 +174,30 @@ export const make = <Key, E, Reason = never>(options: {
     }
 
     const isActive = (key: Key) => Effect.sync(() => executions.has(key))
+    const accepting = (key: Key) => {
+      const execution = executions.get(key)
+      return execution?.open && !execution.stopping ? execution : undefined
+    }
+    const executionID = (key: Key) => Effect.sync(() => accepting(key)?.id)
+    const stage = <A, Failure>(key: Key, expected: string, operation: Effect.Effect<StagedResult<A>, Failure>) =>
+      Effect.suspend(() => {
+        const execution = accepting(key)
+        if (execution?.id !== expected) return Effect.succeed(Option.none<A>())
+        const result = Deferred.makeUnsafe<Option.Option<A>, Failure>()
+        execution.staged.push({
+          run: Effect.exit(operation).pipe(
+            Effect.map((exit) => {
+              Deferred.doneUnsafe(
+                result,
+                Exit.map(exit, (outcome) => Option.some(outcome.value)),
+              )
+              return Exit.isSuccess(exit) && exit.value.changed
+            }),
+          ),
+          refuse: () => Deferred.doneUnsafe(result, Exit.succeed(Option.none())),
+        })
+        return Deferred.await(result)
+      })
 
     const run = (key: Key): Effect.Effect<void, E> =>
       Effect.suspend(() => {
@@ -188,6 +267,8 @@ export const make = <Key, E, Reason = never>(options: {
     return {
       active: Effect.sync(() => new Set(executions.keys())),
       draining,
+      executionID,
+      stage,
       isActive,
       run,
       wake,

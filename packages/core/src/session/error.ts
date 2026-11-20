@@ -64,6 +64,11 @@ export class PromptConflictError extends Schema.TaggedError<PromptConflictError>
   messageID: SessionMessage.ID,
 }) {}
 
+export class ExecutionChangedError extends Schema.TaggedError<ExecutionChangedError>()(
+  "Session.ExecutionChangedError",
+  { sessionID: SessionSchema.ID, expected: Schema.String },
+) {}
+
 export class SyntheticConflictError extends Schema.TaggedError<SyntheticConflictError>()(
   "Session.SyntheticConflictError",
   {
